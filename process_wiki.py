@@ -124,8 +124,12 @@ def get_optimal_workers() -> int:
     max_by_ram = available_ram // ram_per_worker
     max_by_cpu = cpu_cores
     
-    optimal = min(max_by_ram, max_by_cpu, 8)  # Cap at 8
-    return max(1, optimal)
+    # For I/O-bound tasks, allow up to 2x CPU cores
+    # Remove hard cap to support high-performance machines
+    max_workers = min(max_by_ram, max_by_cpu * 2)
+    optimal = max(1, max_workers)
+    
+    return optimal
 
 
 def worker_wrapper(args):
