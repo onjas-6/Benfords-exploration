@@ -321,6 +321,7 @@ def process_wikipedia(
     sample_rate: float = None,
     sample_count: int = None,
     sample_seed: int = 42,
+    consecutive: bool = False,
     enable_benchmarking: bool = False
 ):
     """
@@ -366,17 +367,21 @@ def process_wikipedia(
     
     # Apply sampling if requested
     if sample_rate or sample_count:
-        console.print(f"[yellow]Sampling enabled (seed={sample_seed})[/yellow]")
+        mode = "consecutive" if consecutive else "random"
+        console.print(f"[yellow]Sampling enabled ({mode}, seed={sample_seed})[/yellow]")
         sampler = WikipediaSampler(seed=sample_seed)
         
         if sample_rate:
             console.print(f"[yellow]Sample rate: {sample_rate*100:.2f}%[/yellow]")
-            entries = sampler.sample_entries(entries, sample_rate=sample_rate)
+            entries = sampler.sample_entries(entries, sample_rate=sample_rate, consecutive=consecutive)
         else:
             console.print(f"[yellow]Sample count: {sample_count:,}[/yellow]")
-            entries = sampler.sample_entries(entries, sample_count=sample_count)
+            entries = sampler.sample_entries(entries, sample_count=sample_count, consecutive=consecutive)
         
-        console.print(f"[green]✓ Sampled {len(entries):,} articles[/green]")
+        if consecutive:
+            console.print(f"[green]✓ Sampled {len(entries):,} consecutive articles (fast I/O)[/green]")
+        else:
+            console.print(f"[green]✓ Sampled {len(entries):,} random articles (slow I/O)[/green]")
         
         # Print time estimate
         estimate = sampler.estimate_processing_time(len(entries), num_workers=num_workers)
@@ -655,6 +660,11 @@ def main():
         help="Random seed for sampling (default: 42)"
     )
     parser.add_argument(
+        "--consecutive",
+        action="store_true",
+        help="Use consecutive articles instead of random (much faster I/O)"
+    )
+    parser.add_argument(
         "--benchmark",
         action="store_true",
         help="Enable detailed timing benchmarks"
@@ -693,6 +703,7 @@ def main():
                 sample_rate=args.sample_rate,
                 sample_count=args.sample_count,
                 sample_seed=args.sample_seed,
+                consecutive=args.consecutive,
                 enable_benchmarking=args.benchmark
             )
         

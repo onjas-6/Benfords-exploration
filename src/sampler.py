@@ -53,21 +53,28 @@ class WikipediaSampler:
         self,
         entries: List[Tuple[int, int, str]],
         sample_rate: Optional[float] = None,
-        sample_count: Optional[int] = None
+        sample_count: Optional[int] = None,
+        consecutive: bool = False
     ) -> List[Tuple[int, int, str]]:
         """
-        Randomly sample entries.
+        Sample entries (random or consecutive).
         
         Args:
             entries: List of (offset, article_id, title) tuples
             sample_rate: Fraction to sample (e.g., 0.01 for 1%)
             sample_count: Absolute number to sample
+            consecutive: If True, take first N articles (much faster I/O).
+                        If False, random sample across entire dataset.
             
         Returns:
             Sampled list of entries
             
         Note:
             Exactly one of sample_rate or sample_count must be provided.
+            
+        Performance:
+            - consecutive=True: Only reads ~5% of dump file (fast)
+            - consecutive=False: Reads entire dump file (slow, but truly random)
         """
         if sample_rate is None and sample_count is None:
             raise ValueError("Must provide either sample_rate or sample_count")
@@ -85,13 +92,17 @@ class WikipediaSampler:
         if sample_count > total:
             raise ValueError(f"sample_count ({sample_count}) exceeds total entries ({total})")
         
-        # Random sampling without replacement
-        sampled = random.sample(entries, sample_count)
-        
-        # Sort by offset for efficient sequential disk access
-        sampled.sort(key=lambda x: x[0])
-        
-        return sampled
+        if consecutive:
+            # Take first N articles - much faster I/O
+            return entries[:sample_count]
+        else:
+            # Random sampling without replacement
+            sampled = random.sample(entries, sample_count)
+            
+            # Sort by offset for efficient sequential disk access
+            sampled.sort(key=lambda x: x[0])
+            
+            return sampled
     
     def group_by_offset(
         self,
