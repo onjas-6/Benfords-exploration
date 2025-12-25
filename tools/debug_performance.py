@@ -13,7 +13,7 @@ sys.path.insert(0, '/root/Benfords-exploration')
 from collections import Counter
 from src.extractor import extract_numbers_from_bytes, extract_categorized_numbers
 from src.categorizer import strip_wikitext
-from src.number_categorizer_optimized import categorize_number_optimized
+from src.number_categorizer import categorize_number
 import mwparserfromhell
 import re
 
@@ -171,7 +171,7 @@ def main():
             context_end = min(len(plain_text), end_pos + 30)
             context = plain_text[context_start:context_end]
             
-            category = categorize_number_optimized(num_str, context)
+            category = categorize_number(num_str, context)
             results.append((float(num_str.replace(',', '')), category))
         return results
     

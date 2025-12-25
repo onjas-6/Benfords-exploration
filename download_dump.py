@@ -10,8 +10,8 @@ import requests
 from tqdm import tqdm
 
 
-DUMP_URL = "https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles-multistream.xml.bz2"
-INDEX_URL = "https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles-multistream-index.txt.bz2"
+DUMP_URL = "https://dumps.wikimedia.your.org/enwiki/latest/enwiki-latest-pages-articles-multistream.xml.bz2"
+INDEX_URL = "https://dumps.wikimedia.your.org/enwiki/latest/enwiki-latest-pages-articles-multistream-index.txt.bz2"
 
 DATA_DIR = Path(__file__).parent / "data"
 

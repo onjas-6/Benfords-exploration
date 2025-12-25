@@ -7,10 +7,10 @@ Enhanced with category extraction based on context.
 import re
 from typing import List, Tuple, Optional
 try:
-    from .number_categorizer_optimized import get_optimized_categorizer
+    from .number_categorizer import get_categorizer
 except ImportError:
     # For standalone testing
-    from number_categorizer_optimized import get_optimized_categorizer
+    from number_categorizer import get_categorizer
 
 
 # Regex pattern for numbers (works on bytes)
@@ -169,7 +169,7 @@ def extract_numbers_with_context(
     # Re-compile pattern for string (not bytes)
     pattern = re.compile(r'(?<![0-9])[1-9][0-9]{0,15}(?:\.[0-9]+)?(?![0-9])')
     
-    categorizer = get_optimized_categorizer() if categorize else None
+    categorizer = get_categorizer() if categorize else None
     
     for match in pattern.finditer(text):
         try:
