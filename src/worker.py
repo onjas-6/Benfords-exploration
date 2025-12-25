@@ -1,11 +1,13 @@
 """
 Worker process for parallel Wikipedia processing.
 Handles chunk processing with two-pass extraction and LZ4 compression.
+Enhanced with category extraction and detailed benchmarking.
 """
 
 import bz2
 import gc
 import lz4.frame
+import time
 from pathlib import Path
 from typing import List, Tuple, Dict
 from io import BytesIO
@@ -13,24 +15,36 @@ import mwparserfromhell
 import polars as pl
 from lxml import etree
 
-from .extractor import quick_has_numbers, extract_numbers_from_bytes, analyze_number
+from .extractor import quick_has_numbers, extract_categorized_numbers, analyze_number
 from .categorizer import extract_infobox_type, categorize_by_infobox, strip_wikitext
 
 
 class ChunkWorker:
     """Worker for processing a chunk of Wikipedia articles."""
     
-    def __init__(self, dump_path: Path, temp_dir: Path):
+    def __init__(self, dump_path: Path, temp_dir: Path, enable_benchmarking: bool = False):
         """
         Initialize chunk worker.
         
         Args:
             dump_path: Path to Wikipedia dump file
             temp_dir: Directory for temporary output files
+            enable_benchmarking: Enable detailed timing benchmarks
         """
         self.dump_path = dump_path
         self.temp_dir = temp_dir
         self.temp_dir.mkdir(parents=True, exist_ok=True)
+        self.enable_benchmarking = enable_benchmarking
+        
+        # Benchmarking data
+        self.timings = {
+            'decompress': [],
+            'xml_parse': [],
+            'strip_wikitext': [],
+            'extract_numbers': [],
+            'categorize': [],
+            'total_per_article': []
+        }
     
     def process_chunk(
         self,
@@ -38,7 +52,7 @@ class ChunkWorker:
         start_offset: int,
         end_offset: int,
         article_ids: List[int]
-    ) -> Tuple[Path, int, int]:
+    ) -> Tuple[Path, int, int, Dict]:
         """
         Process a chunk of articles and write results to temp file.
         
@@ -49,7 +63,7 @@ class ChunkWorker:
             article_ids: List of article IDs in this chunk
             
         Returns:
-            Tuple of (temp_file_path, articles_processed, numbers_extracted)
+            Tuple of (temp_file_path, articles_processed, numbers_extracted, timings_dict)
         """
         article_ids_set = set(article_ids) if article_ids else None
         
@@ -61,27 +75,41 @@ class ChunkWorker:
         with open(self.dump_path, 'rb') as f:
             f.seek(start_offset)
             
-            # Read the chunk
-            if end_offset > 0:
-                chunk_size = end_offset - start_offset
-                compressed_data = f.read(chunk_size)
-            else:
-                # For last chunk, read in manageable pieces
-                # The multistream format should handle this gracefully
-                max_read = 200 * 1024 * 1024  # 200MB max per chunk
-                compressed_data = f.read(max_read)
-            
+            # Decompress using BZ2Decompressor for proper stream handling
+            t_start = time.perf_counter() if self.enable_benchmarking else None
             try:
-                decompressed_data = bz2.decompress(compressed_data)
+                decompressor = bz2.BZ2Decompressor()
+                decompressed_data = b''
+                read_chunk_size = 8192
+                
+                # Read and decompress until we hit the end of the stream
+                while not decompressor.eof:
+                    chunk = f.read(read_chunk_size)
+                    if not chunk:
+                        break
+                    try:
+                        decompressed_data += decompressor.decompress(chunk)
+                    except EOFError:
+                        break
+                
+                if self.enable_benchmarking:
+                    self.timings['decompress'].append(time.perf_counter() - t_start)
+                
+                if not decompressed_data:
+                    print(f"Warning: No data decompressed for chunk {chunk_id}")
+                    return None, 0, 0, {}
+                    
             except Exception as e:
                 print(f"Warning: Could not decompress chunk {chunk_id}: {e}")
-                return None, 0, 0
+                return None, 0, 0, {}
             
             # Parse XML
             try:
-                # Wrap in root element if needed
+                t_xml_start = time.perf_counter() if self.enable_benchmarking else None
+                
+                # Wrap in root element with namespace if needed
                 if not decompressed_data.startswith(b'<mediawiki'):
-                    xml_data = b'<mediawiki>' + decompressed_data + b'</mediawiki>'
+                    xml_data = b'<mediawiki xmlns="http://www.mediawiki.org/xml/export-0.11/">' + decompressed_data + b'</mediawiki>'
                 else:
                     xml_data = decompressed_data
                 
@@ -91,6 +119,9 @@ class ChunkWorker:
                     events=('end',),
                     tag='{http://www.mediawiki.org/xml/export-0.11/}page'
                 )
+                
+                if self.enable_benchmarking:
+                    self.timings['xml_parse'].append(time.perf_counter() - t_xml_start)
                 
                 for event, elem in context:
                     try:
@@ -117,7 +148,7 @@ class ChunkWorker:
                 
             except Exception as e:
                 print(f"Warning: XML parsing error in chunk {chunk_id}: {e}")
-                return None, 0, 0
+                return None, 0, 0, {}
         
         # Write records to temp file
         if records:
@@ -130,9 +161,9 @@ class ChunkWorker:
             # Force garbage collection
             gc.collect()
             
-            return temp_path, articles_processed, numbers_extracted
+            return temp_path, articles_processed, numbers_extracted, self.timings
         
-        return None, articles_processed, numbers_extracted
+        return None, articles_processed, numbers_extracted, self.timings
     
     def _process_article(self, page_elem) -> Dict:
         """
@@ -179,13 +210,16 @@ class ChunkWorker:
         if not quick_has_numbers(wikitext_bytes):
             return None
         
-        # PASS 2: Full extraction
+        # PASS 2: Full extraction with categorization
         try:
+            t_article_start = time.perf_counter() if self.enable_benchmarking else None
+            
             # Extract domain from infobox
             infobox_type = extract_infobox_type(wikitext)
             domain = categorize_by_infobox(infobox_type)
             
             # Strip wikitext to plain text
+            t_strip_start = time.perf_counter() if self.enable_benchmarking else None
             try:
                 plain_text = strip_wikitext(wikitext)
                 text_bytes = plain_text.encode('utf-8', errors='ignore')
@@ -193,15 +227,22 @@ class ChunkWorker:
                 # If stripping fails, use original
                 text_bytes = wikitext_bytes
             
-            # Extract numbers
-            numbers = extract_numbers_from_bytes(text_bytes)
+            if self.enable_benchmarking:
+                self.timings['strip_wikitext'].append(time.perf_counter() - t_strip_start)
             
-            if not numbers:
+            # Extract numbers with categories
+            t_extract_start = time.perf_counter() if self.enable_benchmarking else None
+            numbers_with_categories = extract_categorized_numbers(text_bytes)
+            
+            if self.enable_benchmarking:
+                self.timings['extract_numbers'].append(time.perf_counter() - t_extract_start)
+            
+            if not numbers_with_categories:
                 return None
             
             # Create records
             records = []
-            for number in numbers:
+            for number, category in numbers_with_categories:
                 first_digit, second_digit = analyze_number(number)
                 
                 # Only keep numbers with valid first digit
@@ -210,9 +251,13 @@ class ChunkWorker:
                         'article_id': article_id,
                         'domain': domain,
                         'number': number,
+                        'number_category': category,  # NEW FIELD
                         'first_digit': first_digit,
                         'second_digit': second_digit
                     })
+            
+            if self.enable_benchmarking and t_article_start:
+                self.timings['total_per_article'].append(time.perf_counter() - t_article_start)
             
             return {
                 'article_id': article_id,
@@ -231,8 +276,9 @@ def process_chunk_with_retry(
     start_offset: int,
     end_offset: int,
     article_ids: List[int],
-    max_retries: int = 3
-) -> Tuple[Path, int, int]:
+    max_retries: int = 3,
+    enable_benchmarking: bool = False
+) -> Tuple[Path, int, int, Dict]:
     """
     Process a chunk with retry logic.
     
@@ -244,13 +290,12 @@ def process_chunk_with_retry(
         end_offset: End byte offset
         article_ids: List of article IDs in chunk
         max_retries: Maximum number of retry attempts
+        enable_benchmarking: Enable detailed timing
         
     Returns:
-        Tuple of (temp_file_path, articles_processed, numbers_extracted)
+        Tuple of (temp_file_path, articles_processed, numbers_extracted, timings_dict)
     """
-    import time
-    
-    worker = ChunkWorker(dump_path, temp_dir)
+    worker = ChunkWorker(dump_path, temp_dir, enable_benchmarking=enable_benchmarking)
     
     for attempt in range(max_retries):
         try:

@@ -1,0 +1,474 @@
+# Number Category Configuration
+# Defines all 59 categories with expected Benford's Law conformity
+
+categories:
+  # ========================================================================
+  # GROUP A: TEMPORAL (Expected to VIOLATE Benford's Law)
+  # ========================================================================
+  - name: date_full
+    group: temporal
+    expected_mad: "> 0.08"
+    description: "Complete dates (month/day/year)"
+    examples: ["December 25, 2025", "12/25/2025", "2025-12-25"]
+    
+  - name: year
+    group: temporal
+    expected_mad: "> 0.08"
+    description: "Standalone years (1000-2100)"
+    examples: ["1999", "in 2024"]
+    notes: "Heavily biased toward 1 and 2 as first digits"
+    
+  - name: time
+    group: temporal
+    expected_mad: "> 0.08"
+    description: "Clock times"
+    examples: ["3:45 PM", "14:30:00"]
+    notes: "Hours 0-23, constrained range"
+    
+  - name: duration
+    group: temporal
+    expected_mad: "0.03-0.08"
+    description: "Time durations"
+    examples: ["2 hours", "30 minutes", "5 days"]
+    
+  - name: age
+    group: temporal
+    expected_mad: "0.03-0.08"
+    description: "Human ages"
+    examples: ["25 years old", "aged 30"]
+    notes: "Most common 20-80, moderate violation"
+    
+  - name: century_decade
+    group: temporal
+    expected_mad: "> 0.08"
+    description: "Centuries and decades"
+    examples: ["19th century", "1990s"]
+
+  # ========================================================================
+  # GROUP B: IDENTIFIERS (Expected to VIOLATE - Assigned Numbers)
+  # ========================================================================
+  - name: phone
+    group: identifier
+    expected_mad: "> 0.08"
+    description: "Phone numbers"
+    examples: ["(555) 123-4567", "+1-800-555-0100"]
+    notes: "Assigned, not natural"
+    
+  - name: postal_code
+    group: identifier
+    expected_mad: "> 0.08"
+    description: "Postal codes"
+    examples: ["90210", "SW1A 1AA", "M5V 3L9"]
+    
+  - name: isbn
+    group: identifier
+    expected_mad: "> 0.08"
+    description: "ISBN numbers"
+    examples: ["ISBN 978-3-16-148410-0"]
+    
+  - name: ip_address
+    group: identifier
+    expected_mad: "> 0.08"
+    description: "IP addresses"
+    examples: ["192.168.1.1"]
+    
+  - name: coordinates
+    group: identifier
+    expected_mad: "> 0.08"
+    description: "Geographic coordinates"
+    examples: ["37.7749° N", "122.4194° W"]
+    notes: "Constrained range (-90 to 90, -180 to 180)"
+    
+  - name: version
+    group: identifier
+    expected_mad: "0.03-0.08"
+    description: "Software version numbers"
+    examples: ["v2.0.1", "version 3.5"]
+    
+  - name: flight_number
+    group: identifier
+    expected_mad: "> 0.08"
+    description: "Flight numbers"
+    examples: ["AA123", "UA 456"]
+
+  # ========================================================================
+  # GROUP C: RANKINGS & SCORES (Expected to VIOLATE - Constrained)
+  # ========================================================================
+  - name: ranking
+    group: ranking
+    expected_mad: "0.03-0.08"
+    description: "Rankings and ordinals"
+    examples: ["1st place", "2nd largest", "3rd edition"]
+    notes: "Weighted toward 1st, 2nd"
+    
+  - name: score_sports
+    group: ranking
+    expected_mad: "0.03-0.08"
+    description: "Sports scores"
+    examples: ["3-2", "won 4-1"]
+    notes: "Typical 0-10 range"
+    
+  - name: rating
+    group: ranking
+    expected_mad: "> 0.08"
+    description: "Rating scales"
+    examples: ["4 out of 5", "8/10", "3.5 stars"]
+    
+  - name: percentage
+    group: ranking
+    expected_mad: "> 0.08"
+    description: "Percentages"
+    examples: ["75%", "0.5 percent"]
+    notes: "Constrained 0-100"
+    
+  - name: chart_position
+    group: ranking
+    expected_mad: "0.03-0.08"
+    description: "Chart positions"
+    examples: ["#1", "number 5 on Billboard"]
+
+  # ========================================================================
+  # GROUP D: PHYSICAL MEASUREMENTS (Expected to CONFORM or Mixed)
+  # ========================================================================
+  - name: distance
+    group: measurement
+    expected_mad: "< 0.03"
+    description: "Linear distances"
+    examples: ["5 km", "100 miles", "2.5 meters"]
+    notes: "Scale-invariant, should conform"
+    
+  - name: distance_astro
+    group: measurement
+    expected_mad: "< 0.03"
+    description: "Astronomical distances"
+    examples: ["4.2 light-years", "10 parsecs", "5 AU"]
+    notes: "Many orders of magnitude, should conform"
+    
+  - name: area
+    group: measurement
+    expected_mad: "< 0.03"
+    description: "Areas"
+    examples: ["50 km²", "100 acres", "2.5 hectares"]
+    notes: "Wide range, should conform"
+    
+  - name: volume
+    group: measurement
+    expected_mad: "< 0.03"
+    description: "Volumes"
+    examples: ["2 liters", "5 gallons", "100 mL"]
+    
+  - name: mass_weight
+    group: measurement
+    expected_mad: "< 0.03"
+    description: "Mass and weight"
+    examples: ["70 kg", "150 lbs", "500 grams"]
+    notes: "Wide range, should conform"
+    
+  - name: mass_astro
+    group: measurement
+    expected_mad: "< 0.03"
+    description: "Astronomical masses"
+    examples: ["1.5 solar masses", "10 Earth masses"]
+    
+  - name: elevation
+    group: measurement
+    expected_mad: "< 0.03"
+    description: "Elevation above sea level"
+    examples: ["8848 m above sea level", "altitude 500 ft"]
+    notes: "Wide range, should conform"
+    
+  - name: depth
+    group: measurement
+    expected_mad: "< 0.03"
+    description: "Depth below surface"
+    examples: ["100 m deep", "depth of 50 ft"]
+    
+  - name: temperature
+    group: measurement
+    expected_mad: "0.03-0.08"
+    description: "Temperature"
+    examples: ["25°C", "77°F", "300 K"]
+    notes: "Often clustered around common temps (0-40°C)"
+    
+  - name: speed
+    group: measurement
+    expected_mad: "< 0.03"
+    description: "Velocities"
+    examples: ["100 km/h", "60 mph", "5 m/s"]
+    
+  - name: time_record
+    group: measurement
+    expected_mad: "unknown"
+    description: "Sports/race times"
+    examples: ["9.58 seconds", "2:01:39"]
+
+  # ========================================================================
+  # GROUP E: SCIENTIFIC MEASUREMENTS (Expected to CONFORM)
+  # ========================================================================
+  - name: energy
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Energy"
+    examples: ["500 kWh", "2000 calories", "5 MeV"]
+    notes: "Industrial scale, wide range"
+    
+  - name: power
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Power"
+    examples: ["100 MW", "5 kW", "200 horsepower"]
+    
+  - name: force
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Force"
+    examples: ["10 kN", "500 N"]
+    
+  - name: pressure
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Pressure"
+    examples: ["101.3 kPa", "14.7 psi", "1 atm"]
+    
+  - name: frequency
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Frequency"
+    examples: ["2.4 GHz", "440 Hz"]
+    
+  - name: wavelength
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Wavelength"
+    examples: ["550 nm", "1.5 μm"]
+    
+  - name: electric
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Electrical measurements"
+    examples: ["220V", "10A", "100Ω", "500mAh"]
+    
+  - name: magnetic
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Magnetic field strength"
+    examples: ["1.5 T", "1000 gauss"]
+    
+  - name: radiation
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Radiation dosage"
+    examples: ["5 mSv", "100 Bq"]
+    
+  - name: concentration
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Chemical concentration"
+    examples: ["5 ppm", "0.1 M", "50 mg/dL"]
+    
+  - name: density
+    group: scientific
+    expected_mad: "< 0.03"
+    description: "Density"
+    examples: ["1.2 g/cm³", "800 kg/m³"]
+
+  # ========================================================================
+  # GROUP F: FINANCIAL (Expected to CONFORM)
+  # ========================================================================
+  - name: money
+    group: financial
+    expected_mad: "< 0.03"
+    description: "Currency amounts"
+    examples: ["$100", "€50", "£25"]
+    notes: "Wide range, should conform"
+    
+  - name: money_magnitude
+    group: financial
+    expected_mad: "< 0.03"
+    description: "Large currency amounts with magnitude"
+    examples: ["$5 million", "€2 billion", "$100 thousand"]
+    notes: "Many orders of magnitude, should conform"
+
+  # ========================================================================
+  # GROUP G: DEMOGRAPHIC (Expected to CONFORM)
+  # ========================================================================
+  - name: population
+    group: demographic
+    expected_mad: "< 0.03"
+    description: "Population counts"
+    examples: ["population of 1 million", "5,000 people"]
+    notes: "Many orders of magnitude, should conform well"
+    
+  - name: casualties
+    group: demographic
+    expected_mad: "< 0.03"
+    description: "Casualty counts"
+    examples: ["5,000 killed", "100 wounded"]
+    notes: "Historical battles vary widely"
+    
+  - name: votes
+    group: demographic
+    expected_mad: "< 0.03"
+    description: "Vote counts"
+    examples: ["won by 1000 votes", "50,000 ballots"]
+
+  # ========================================================================
+  # GROUP H: TECHNICAL/COMPUTING (Mixed Behavior)
+  # ========================================================================
+  - name: file_size
+    group: computing
+    expected_mad: "unknown"
+    description: "Data file sizes"
+    examples: ["500 MB", "2 GB", "1.5 TB"]
+    notes: "May be constrained by storage conventions"
+    
+  - name: bit_rate
+    group: computing
+    expected_mad: "unknown"
+    description: "Data transfer rates"
+    examples: ["128 kbps", "10 Mbps", "1 Gbps"]
+    
+  - name: resolution
+    group: computing
+    expected_mad: "> 0.08"
+    description: "Display resolutions"
+    examples: ["1920x1080", "4K", "720p"]
+    notes: "Standard resolutions dominate"
+    
+  - name: clock_speed
+    group: computing
+    expected_mad: "unknown"
+    description: "Processor clock speeds"
+    examples: ["3.5 GHz", "2.4 MHz"]
+
+  # ========================================================================
+  # GROUP I: LOGARITHMIC SCALES (Special - Constrained)
+  # ========================================================================
+  - name: richter
+    group: logarithmic
+    expected_mad: "> 0.08"
+    description: "Earthquake magnitude"
+    examples: ["magnitude 6.5", "Richter scale 7.2"]
+    notes: "Logarithmic scale, typical range 2-9"
+    
+  - name: decibel
+    group: logarithmic
+    expected_mad: "0.03-0.08"
+    description: "Sound level"
+    examples: ["85 dB", "100 decibels"]
+    notes: "Logarithmic, but wider practical range"
+    
+  - name: ph
+    group: logarithmic
+    expected_mad: "> 0.08"
+    description: "pH levels"
+    examples: ["pH 7.4", "pH of 5"]
+    notes: "Constrained 0-14, logarithmic"
+    
+  - name: magnitude_astro
+    group: logarithmic
+    expected_mad: "0.03-0.08"
+    description: "Stellar magnitude"
+    examples: ["apparent magnitude 4.5", "magnitude -26"]
+    notes: "Logarithmic, negative to positive"
+
+  # ========================================================================
+  # GROUP J: SPORTS STATISTICS (Mixed)
+  # ========================================================================
+  - name: batting_avg
+    group: sports
+    expected_mad: "> 0.08"
+    description: "Baseball batting averages"
+    examples: [".300", ".256"]
+    notes: "Typical range .200-.400"
+    
+  - name: jersey_number
+    group: sports
+    expected_mad: "> 0.08"
+    description: "Jersey/uniform numbers"
+    examples: ["number 23", "wore #10"]
+    notes: "Typically 1-99, favorites like 7, 10, 23"
+    
+  - name: record_stat
+    group: sports
+    expected_mad: "unknown"
+    description: "Sports statistics"
+    examples: ["58 goals", "102 RBIs"]
+
+  # ========================================================================
+  # GROUP K: COUNTS & QUANTITIES (Unknown)
+  # ========================================================================
+  - name: small_count
+    group: count
+    expected_mad: "> 0.08"
+    description: "Small counting numbers (1-20)"
+    examples: ["3 children", "5 albums"]
+    notes: "Constrained range 1-20"
+    
+  - name: episode_chapter
+    group: count
+    expected_mad: "unknown"
+    description: "Episode/chapter/season numbers"
+    examples: ["Episode 5", "Chapter 12", "Season 3"]
+
+  # ========================================================================
+  # GROUP L: GENERIC (Fallback - Unknown)
+  # ========================================================================
+  - name: generic
+    group: fallback
+    expected_mad: "unknown"
+    description: "Numbers not matching any specific pattern"
+    examples: ["standalone numbers without clear context"]
+    notes: "Mixed content, behavior unpredictable"
+
+
+# Group summaries
+groups:
+  temporal:
+    description: "Time-related numbers"
+    expected_conformity: "Non-conforming (violate Benford)"
+    
+  identifier:
+    description: "Assigned identifiers and codes"
+    expected_conformity: "Non-conforming (assigned, not natural)"
+    
+  ranking:
+    description: "Rankings, scores, ratings"
+    expected_conformity: "Non-conforming (constrained ranges)"
+    
+  measurement:
+    description: "Physical measurements"
+    expected_conformity: "Mostly conforming (scale-invariant)"
+    
+  scientific:
+    description: "Scientific/technical measurements"
+    expected_conformity: "Conforming (wide ranges)"
+    
+  financial:
+    description: "Money and financial data"
+    expected_conformity: "Conforming (many magnitudes)"
+    
+  demographic:
+    description: "Population and people counts"
+    expected_conformity: "Strongly conforming"
+    
+  computing:
+    description: "Computer/digital measurements"
+    expected_conformity: "Mixed (some standardized)"
+    
+  logarithmic:
+    description: "Logarithmic scales"
+    expected_conformity: "Non-conforming (constrained)"
+    
+  sports:
+    description: "Sports-related numbers"
+    expected_conformity: "Mixed"
+    
+  count:
+    description: "Counting numbers"
+    expected_conformity: "Mixed (depends on range)"
+    
+  fallback:
+    description: "Unclassified numbers"
+    expected_conformity: "Unknown"
+

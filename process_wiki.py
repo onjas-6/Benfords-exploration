@@ -19,6 +19,7 @@ from rich.table import Table
 
 from src.worker import process_chunk_with_retry
 from src.checkpoint import StateManager, ProcessingState
+from src.sampler import WikipediaSampler
 
 
 console = Console()
@@ -134,7 +135,7 @@ def get_optimal_workers() -> int:
 
 def worker_wrapper(args):
     """Wrapper for multiprocessing."""
-    chunk_id, dump_path, temp_dir, start_offset, end_offset, article_ids = args
+    chunk_id, dump_path, temp_dir, start_offset, end_offset, article_ids, enable_benchmarking = args
     
     try:
         return process_chunk_with_retry(
@@ -143,11 +144,12 @@ def worker_wrapper(args):
             temp_dir=temp_dir,
             start_offset=start_offset,
             end_offset=end_offset,
-            article_ids=article_ids
+            article_ids=article_ids,
+            enable_benchmarking=enable_benchmarking
         )
     except Exception as e:
         console.print(f"[red]✗ Chunk {chunk_id} failed: {e}[/red]")
-        return None, 0, 0
+        return None, 0, 0, {}
 
 
 def merge_parquet_files(temp_files: List[Path], output_path: Path):
@@ -222,6 +224,51 @@ def generate_summary(data_path: Path, output_path: Path):
     console.print(f"[green]✓ Summary saved to {output_path}[/green]")
 
 
+def print_benchmark_stats(all_timings: List[Dict]):
+    """Print detailed benchmark statistics."""
+    import statistics
+    
+    console.print()
+    console.print("[bold cyan]BENCHMARK RESULTS[/bold cyan]")
+    console.print("="*60)
+    
+    # Aggregate timings across all workers
+    aggregated = {}
+    for timings in all_timings:
+        for key, values in timings.items():
+            if key not in aggregated:
+                aggregated[key] = []
+            aggregated[key].extend(values)
+    
+    # Print statistics for each timing category
+    table = Table(title="Per-Article Timing Breakdown")
+    table.add_column("Operation", style="cyan")
+    table.add_column("Mean (ms)", justify="right", style="green")
+    table.add_column("Median (ms)", justify="right")
+    table.add_column("P95 (ms)", justify="right")
+    table.add_column("Max (ms)", justify="right", style="yellow")
+    table.add_column("Count", justify="right")
+    
+    for operation, times in sorted(aggregated.items()):
+        if times:
+            mean_ms = statistics.mean(times) * 1000
+            median_ms = statistics.median(times) * 1000
+            p95_ms = sorted(times)[int(len(times) * 0.95)] * 1000 if len(times) > 1 else mean_ms
+            max_ms = max(times) * 1000
+            
+            table.add_row(
+                operation,
+                f"{mean_ms:.2f}",
+                f"{median_ms:.2f}",
+                f"{p95_ms:.2f}",
+                f"{max_ms:.2f}",
+                f"{len(times):,}"
+            )
+    
+    console.print(table)
+    console.print()
+
+
 def display_progress_table(state: ProcessingState):
     """Display progress statistics."""
     table = Table(title="Processing Statistics")
@@ -235,7 +282,7 @@ def display_progress_table(state: ProcessingState):
     table.add_row("Failed Chunks", f"{len(state.failed_chunks)}")
     
     if state.stats['articles'] > 0:
-        avg_numbers = state.stats['numbers'] / state.stats['articles']
+        avg_numbers = state.stats['articles'] / state.stats['articles']
         table.add_row("Avg Numbers/Article", f"{avg_numbers:.1f}")
     
     console.print(table)
@@ -247,10 +294,14 @@ def process_wikipedia(
     output_path: Path,
     num_workers: int = None,
     num_chunks: int = 100,
-    resume: bool = True
+    resume: bool = True,
+    sample_rate: float = None,
+    sample_count: int = None,
+    sample_seed: int = 42,
+    enable_benchmarking: bool = False
 ):
     """
-    Main processing function.
+    Main processing function with optional sampling.
     
     Args:
         dump_path: Path to Wikipedia dump
@@ -283,6 +334,24 @@ def process_wikipedia(
     
     # Parse index
     entries = parse_index_file(index_path)
+    
+    # Apply sampling if requested
+    if sample_rate or sample_count:
+        console.print(f"[yellow]Sampling enabled (seed={sample_seed})[/yellow]")
+        sampler = WikipediaSampler(seed=sample_seed)
+        
+        if sample_rate:
+            console.print(f"[yellow]Sample rate: {sample_rate*100:.2f}%[/yellow]")
+            entries = sampler.sample_entries(entries, sample_rate=sample_rate)
+        else:
+            console.print(f"[yellow]Sample count: {sample_count:,}[/yellow]")
+            entries = sampler.sample_entries(entries, sample_count=sample_count)
+        
+        console.print(f"[green]✓ Sampled {len(entries):,} articles[/green]")
+        
+        # Print time estimate
+        estimate = sampler.estimate_processing_time(len(entries), num_workers=num_workers or get_optimal_workers())
+        sampler.print_estimate(estimate)
     
     # Create chunks
     chunks = create_chunks(entries, num_chunks)
@@ -333,15 +402,22 @@ def process_wikipedia(
                 temp_dir,
                 chunk['start_offset'],
                 chunk['end_offset'],
-                chunk['article_ids']
+                chunk['article_ids'],
+                enable_benchmarking
             )
             for chunk in pending_chunks
         ]
         
+        # Collect timing data if benchmarking
+        all_timings = []
+        
         # Process with pool
         with Pool(processes=num_workers) as pool:
             for result in pool.imap_unordered(worker_wrapper, worker_args):
-                temp_file, articles, numbers = result
+                temp_file, articles, numbers, timings = result
+                
+                if enable_benchmarking and timings:
+                    all_timings.append(timings)
                 
                 if temp_file:
                     temp_files.append(temp_file)
@@ -354,6 +430,10 @@ def process_wikipedia(
     console.print()
     console.print("[green]✓ Processing complete![/green]")
     console.print()
+    
+    # Display benchmark data if enabled
+    if enable_benchmarking and all_timings:
+        print_benchmark_stats(all_timings)
     
     # Display final stats
     state = state_manager.load()
@@ -532,6 +612,29 @@ def main():
         action="store_true",
         help="Quick validation mode (alias for --test)"
     )
+    parser.add_argument(
+        "--sample-rate",
+        type=float,
+        default=None,
+        help="Random sample rate (e.g., 0.01 for 1%%)"
+    )
+    parser.add_argument(
+        "--sample-count",
+        type=int,
+        default=None,
+        help="Random sample count (e.g., 10000 for 10k articles)"
+    )
+    parser.add_argument(
+        "--sample-seed",
+        type=int,
+        default=42,
+        help="Random seed for sampling (default: 42)"
+    )
+    parser.add_argument(
+        "--benchmark",
+        action="store_true",
+        help="Enable detailed timing benchmarks"
+    )
     
     args = parser.parse_args()
     
@@ -546,6 +649,11 @@ def main():
         console.print("[yellow]Run download_dump.py first[/yellow]")
         return 1
     
+    # Validate sampling arguments
+    if args.sample_rate and args.sample_count:
+        console.print("[red]✗ Cannot specify both --sample-rate and --sample-count[/red]")
+        return 1
+    
     # Run validation or full processing
     try:
         if args.test or args.quick_validate:
@@ -557,7 +665,11 @@ def main():
                 output_path=args.output,
                 num_workers=args.workers,
                 num_chunks=args.chunks,
-                resume=not args.no_resume
+                resume=not args.no_resume,
+                sample_rate=args.sample_rate,
+                sample_count=args.sample_count,
+                sample_seed=args.sample_seed,
+                enable_benchmarking=args.benchmark
             )
         
         return 0

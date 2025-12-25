@@ -1,10 +1,16 @@
 """
 Number extraction from Wikipedia articles using regex on bytes.
 Fast extraction without full UTF-8 decoding.
+Enhanced with category extraction based on context.
 """
 
 import re
-from typing import List, Tuple
+from typing import List, Tuple, Optional
+try:
+    from .number_categorizer_optimized import get_optimized_categorizer
+except ImportError:
+    # For standalone testing
+    from number_categorizer_optimized import get_optimized_categorizer
 
 
 # Regex pattern for numbers (works on bytes)
@@ -134,6 +140,82 @@ def analyze_number(number: float) -> Tuple[int, int]:
         Tuple of (first_digit, second_digit)
     """
     return (get_first_digit(number), get_second_digit(number))
+
+
+def extract_numbers_with_context(
+    text_bytes: bytes,
+    context_window: int = 30,
+    categorize: bool = True
+) -> List[Tuple[float, str, int, int]]:
+    """
+    Extract numbers with surrounding context for categorization.
+    
+    Args:
+        text_bytes: Raw bytes of article text
+        context_window: Number of characters before/after number for context
+        categorize: Whether to categorize numbers (requires number_categorizer)
+        
+    Returns:
+        List of (number, category, start_pos, end_pos) tuples
+    """
+    results = []
+    
+    # First convert to string for context extraction
+    try:
+        text = text_bytes.decode('utf-8', errors='ignore')
+    except Exception:
+        return results
+    
+    # Re-compile pattern for string (not bytes)
+    pattern = re.compile(r'(?<![0-9])[1-9][0-9]{0,15}(?:\.[0-9]+)?(?![0-9])')
+    
+    categorizer = get_optimized_categorizer() if categorize else None
+    
+    for match in pattern.finditer(text):
+        try:
+            num_str = match.group(0)
+            # Remove commas if present
+            clean_num_str = num_str.replace(',', '')
+            number = float(clean_num_str)
+            
+            # Sanity check
+            if not (0 < number < 1e16):
+                continue
+            
+            # Extract context window
+            start_pos = match.start()
+            end_pos = match.end()
+            
+            context_start = max(0, start_pos - context_window)
+            context_end = min(len(text), end_pos + context_window)
+            context = text[context_start:context_end]
+            
+            # Categorize if requested
+            if categorizer:
+                category = categorizer.categorize(num_str, context)
+            else:
+                category = 'generic'
+            
+            results.append((number, category, start_pos, end_pos))
+            
+        except (ValueError, UnicodeDecodeError):
+            continue
+    
+    return results
+
+
+def extract_categorized_numbers(text_bytes: bytes) -> List[Tuple[float, str]]:
+    """
+    Extract numbers with their categories.
+    
+    Args:
+        text_bytes: Raw bytes of article text
+        
+    Returns:
+        List of (number, category) tuples
+    """
+    results = extract_numbers_with_context(text_bytes, categorize=True)
+    return [(num, cat) for num, cat, _, _ in results]
 
 
 # Test function
