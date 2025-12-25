@@ -57,7 +57,8 @@ def parse_index_file(index_path: Path) -> List[Tuple[int, int, str]]:
 
 def create_chunks(
     entries: List[Tuple[int, int, str]],
-    num_chunks: int
+    num_chunks: int,
+    filter_article_ids: bool = True
 ) -> List[Dict]:
     """
     Divide articles into chunks for parallel processing.
@@ -65,6 +66,8 @@ def create_chunks(
     Args:
         entries: List of (offset, article_id, title) tuples
         num_chunks: Number of chunks to create
+        filter_article_ids: If True, filter to specific article IDs (for random sampling).
+                          If False, process all articles in byte range (for consecutive).
         
     Returns:
         List of chunk definitions
@@ -99,17 +102,21 @@ def create_chunks(
         else:
             end_offset = -1  # Read to end
         
-        # Collect all article IDs in this chunk
-        article_ids = []
-        for offset in chunk_offsets:
-            article_ids.extend(offset_groups[offset])
+        # Collect all article IDs in this chunk (or None to process all)
+        if filter_article_ids:
+            article_ids = []
+            for offset in chunk_offsets:
+                article_ids.extend(offset_groups[offset])
+        else:
+            # For consecutive sampling: process ALL articles in byte range
+            article_ids = None
         
         chunks.append({
             'chunk_id': len(chunks),
             'start_offset': start_offset,
             'end_offset': end_offset,
             'article_ids': article_ids,
-            'article_count': len(article_ids)
+            'article_count': len(offset_groups[chunk_offsets[0]]) if filter_article_ids else -1
         })
     
     console.print(f"[green]✓ Created {len(chunks)} chunks[/green]")
@@ -388,7 +395,10 @@ def process_wikipedia(
         sampler.print_estimate(estimate)
     
     # Create chunks
-    chunks = create_chunks(entries, num_chunks)
+    # For consecutive sampling, don't filter by article IDs (process all in range)
+    # For random sampling, filter to specific article IDs
+    filter_ids = not (sample_rate or sample_count) or not consecutive
+    chunks = create_chunks(entries, num_chunks, filter_article_ids=filter_ids)
     state.total_chunks = len(chunks)
     state_manager.save(state)
     
