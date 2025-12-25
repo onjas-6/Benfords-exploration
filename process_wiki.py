@@ -116,19 +116,42 @@ def create_chunks(
     return chunks
 
 
-def get_optimal_workers() -> int:
-    """Determine optimal number of worker processes."""
+def get_optimal_workers(verbose: bool = False) -> int:
+    """
+    Determine optimal number of worker processes based on hardware.
+    
+    For this I/O-bound task (decompressing bz2), we can use more workers
+    than CPU cores since workers spend time waiting on I/O.
+    
+    Args:
+        verbose: Print hardware detection info
+        
+    Returns:
+        Optimal number of workers
+    """
     available_ram = psutil.virtual_memory().available
-    ram_per_worker = 500 * 1024 * 1024  # 500MB
+    total_ram = psutil.virtual_memory().total
+    ram_per_worker = 500 * 1024 * 1024  # 500MB per worker
     cpu_cores = psutil.cpu_count(logical=False) or 4
     
     max_by_ram = available_ram // ram_per_worker
-    max_by_cpu = cpu_cores
     
-    # For I/O-bound tasks, allow up to 2x CPU cores
-    # Remove hard cap to support high-performance machines
-    max_workers = min(max_by_ram, max_by_cpu * 2)
-    optimal = max(1, max_workers)
+    # For I/O-bound bz2 decompression:
+    # - Use 3x CPU cores (workers wait on I/O most of the time)
+    # - But cap at RAM limit
+    max_by_cpu = cpu_cores * 3
+    
+    optimal = min(max_by_ram, max_by_cpu)
+    optimal = max(4, optimal)  # Minimum 4 workers
+    
+    if verbose:
+        console.print("\n[cyan]Hardware Detection:[/cyan]")
+        console.print(f"  CPU Cores:      {cpu_cores}")
+        console.print(f"  Total RAM:      {total_ram / (1024**3):.1f} GB")
+        console.print(f"  Available RAM:  {available_ram / (1024**3):.1f} GB")
+        console.print(f"  Max by CPU:     {max_by_cpu} workers (3x cores for I/O-bound)")
+        console.print(f"  Max by RAM:     {max_by_ram} workers (500MB each)")
+        console.print(f"  [green]Optimal:        {optimal} workers[/green]")
     
     return optimal
 
@@ -332,6 +355,12 @@ def process_wikipedia(
         state.total_chunks = num_chunks
         state_manager.save(state)
     
+    # Determine workers FIRST so we can use for estimates
+    if num_workers is None:
+        num_workers = get_optimal_workers(verbose=True)
+    else:
+        console.print(f"\n[yellow]Using manually specified workers: {num_workers}[/yellow]")
+    
     # Parse index
     entries = parse_index_file(index_path)
     
@@ -350,7 +379,7 @@ def process_wikipedia(
         console.print(f"[green]✓ Sampled {len(entries):,} articles[/green]")
         
         # Print time estimate
-        estimate = sampler.estimate_processing_time(len(entries), num_workers=num_workers or get_optimal_workers())
+        estimate = sampler.estimate_processing_time(len(entries), num_workers=num_workers)
         sampler.print_estimate(estimate)
     
     # Create chunks
@@ -358,11 +387,6 @@ def process_wikipedia(
     state.total_chunks = len(chunks)
     state_manager.save(state)
     
-    # Determine workers
-    if num_workers is None:
-        num_workers = get_optimal_workers()
-    
-    console.print(f"[green]Using {num_workers} parallel workers[/green]")
     console.print()
     
     # Get pending chunks
